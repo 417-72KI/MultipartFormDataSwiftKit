@@ -35,8 +35,7 @@ extension XCTestCase {
         retryCount: UInt = 3,
         file: StaticString = #filePath,
         line: UInt = #line
-    ) throws -> TestEntity {
-        let exp = expectation(description: "response")
+    ) async throws -> TestEntity {
         let request = TestRequest(
             genbaNeko: genbaNeko,
             denwaNeko: denwaNeko,
@@ -44,21 +43,19 @@ extension XCTestCase {
             file: file,
             line: line
         )
-        var result: Result<TestRequest.Response, SessionTaskError>!
-        session.send(request, callbackQueue: nil) {
-            result = $0
-            exp.fulfill()
+        let result = await withCheckedContinuation { cont in
+            session.send(request, callbackQueue: nil) {
+                cont.resume(returning: $0)
+            }
         }
 
-        wait(for: [exp], timeout: 10)
-
-        switch result! {
+        switch result {
         case let .success(response):
             return response
         case let .failure(error):
             if retryCount > 0 {
                 print("retry: \(retryCount)")
-                return try uploadWithAPIKit(genbaNeko: genbaNeko, denwaNeko: denwaNeko, message: message, retryCount: retryCount - 1, file: file, line: line)
+                return try await uploadWithAPIKit(genbaNeko: genbaNeko, denwaNeko: denwaNeko, message: message, retryCount: retryCount - 1, file: file, line: line)
             }
             throw error
         }
